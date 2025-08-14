@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}My Awesome Blog{% endblock %}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="page-container">
+        <header class="main-header">
+            <div class="header-content">
+                <h1><a href="/">My Awesome Blog</a></h1>
+                <nav class="main-nav">
+                    <a href="/">Home</a>
+                    <a href="/admin">Admin</a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="main-content">
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for message in messages %}
+                            <div class="flash-message">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="main-footer">
+            <p>&copy; My Awesome Blog. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Base JavaScript functions
+        function confirmAction(message) {
+            return confirm(message || 'Are you sure?');
+        }
+
+        async function submitCommentForm(form) {
+            const formData = new FormData(form);
+            const data = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                content: formData.get('content'),
+                postId: formData.get('post_id'),
+                parentId: formData.get('parent_id') || null
+            };
+
+            try {
+                const response = await fetch('/add_comment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Comment submitted successfully!');
+                    form.reset();
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + (result.message || 'Failed to submit comment'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('There was an error submitting your comment. Please try again.');
+            }
+            
+            return false;
+        }
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

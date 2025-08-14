@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="blog-container">
+    {% if post %}
+        <!-- Single Post View -->
+        <article class="post-full">
+            <h2 class="post-title">{{ post.title }}</h2>
+            <div class="post-meta">
+                <span class="post-author">By {{ post.author.username }}</span>
+                <span class="post-date">on {{ post.created_at.strftime('%B %d, %Y at %H:%M') }}</span>
+            </div>
+            
+            <div class="post-content">
+                {{ post.content|safe }}
+            </div>
+            
+            <div class="post-actions">
+                <a href="/" class="btn back-btn">Back to All Posts</a>
+            </div>
+            
+            <section class="comments-section">
+                <h3>Comments ({{ post.comments|length }})</h3>
+                
+                {% for comment in post.comments %}
+                    {% if not comment.parent_id %}
+                        {% include 'comment.html' %}
+                    {% endif %}
+                {% endfor %}
+                
+                <div class="add-comment">
+                    <h4>Add a Comment</h4>
+                    <form class="comment-form" onsubmit="return submitCommentForm(this)">
+                        <div class="form-group">
+                            <input type="text" name="name" placeholder="Your Name" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="email" name="email" placeholder="Your Email" required>
+                        </div>
+                        <div class="form-group">
+                            <textarea name="content" placeholder="Your Comment" required></textarea>
+                        </div>
+                        <input type="hidden" name="post_id" value="{{ post.id }}">
+                        <button type="submit" class="btn submit-btn">Post Comment</button>
+                    </form>
+                </div>
+            </section>
+        </article>
+    {% else %}
+        <!-- All Posts View -->
+        <div class="posts-list">
+            {% for post in posts %}
+                <article class="post-preview">
+                    <h2 class="post-title"><a href="/post/{{ post.id }}">{{ post.title }}</a></h2>
+                    <div class="post-meta">
+                        <span class="post-author">By {{ post.author.username }}</span>
+                        <span class="post-date">on {{ post.created_at.strftime('%B %d, %Y') }}</span>
+                        <span class="comment-count">{{ post.comments|length }} comments</span>
+                    </div>
+                    
+                    <div class="post-excerpt">
+                        {{ post.content|truncate(300)|safe }}
+                        {% if post.content|length > 300 %}
+                            <a href="/post/{{ post.id }}" class="read-more">Read more</a>
+                        {% endif %}
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Additional blog-specific JavaScript
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle reply button clicks
+        document.querySelectorAll('.reply-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const commentId = this.dataset.commentId;
+                const replyForm = document.querySelector(`.reply-form[data-comment-id="${commentId}"]`);
+                
+                if (replyForm) {
+                    replyForm.style.display = replyForm.style.display === 'none' ? 'block' : 'none';
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
