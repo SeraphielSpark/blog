@@ -1,9 +1,4 @@
-flask
-flask-sqlalchemy
-sqlalchemy
+Flask
+Flask-SQLAlchemy
 psycopg2-binary
-python-dotenv
-gunicorn
-werkzeug
-
-
+Werkzeug
