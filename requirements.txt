@@ -1,8 +1,8 @@
-werkzeug
 flask
 flask-sqlalchemy
 sqlalchemy
 psycopg2-binary
 python-dotenv
 gunicorn
+werkzeug
 
