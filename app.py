@@ -1,16 +1,28 @@
+import os
+from urllib.parse import urlparse
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-import os
 from sqlalchemy import desc
 
+# Initialize Flask app
 app = Flask(__name__)
+
+# Generate secret key if not in environment
 app.secret_key = os.environ.get('SECRET_KEY') or 'dev-secret-key-123'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
+
+# Database configuration
+uri = os.getenv("DATABASE_URL")
+if uri:
+    if uri.startswith("postgres://"):
+        uri = uri.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = uri
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-
 # Database Models
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -47,21 +59,35 @@ class Comment(db.Model):
     post = db.relationship('Post', backref=db.backref('comments', lazy=True, order_by=desc(created_at)))
     replies = db.relationship('Comment', backref=db.backref('parent', remote_side=[id]), lazy=True)
 
+# Context processor for current year
+@app.context_processor
+def inject_current_year():
+    return {'current_year': datetime.utcnow().year}
+
 # Initialize Database
 def init_db():
     with app.app_context():
-        db.create_all()
-        if not User.query.filter_by(username='admin').first():
-            admin = User(username='admin', online=True)
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
+        try:
+            db.create_all()
+            if not User.query.filter_by(username='admin').first():
+                admin = User(username='admin', online=True)
+                admin.set_password('admin123')
+                db.session.add(admin)
+                db.session.commit()
+        except Exception as e:
+            app.logger.error(f"Database initialization error: {e}")
+            db.session.rollback()
 
 # Routes
+# Routes (same as before)
 @app.route('/')
 def home():
-    posts = Post.query.filter_by(is_published=True).order_by(Post.created_at.desc()).all()
-    return render_template('blog.html', posts=posts)
+    try:
+        posts = Post.query.filter_by(is_published=True).order_by(Post.created_at.desc()).all()
+        return render_template('blog.html', posts=posts)
+    except Exception as e:
+        app.logger.error(f"Home route error: {e}")
+        return "An error occurred", 500
 
 @app.route('/post/<int:post_id>')
 def post_detail(post_id):
@@ -196,6 +222,13 @@ def admin_logout():
     session.pop('user_id', None)
     return redirect(url_for('home'))
 
+
 if __name__ == '__main__':
+    # Initialize database
     init_db()
-    app.run(debug=True)
+    
+    # Get port from environment or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Run the app
+    app.run(host='0.0.0.0', port=port)
