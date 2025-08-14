@@ -6,24 +6,19 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy import desc
 
-# Initialize Flask app
+
 app = Flask(__name__)
 
-# Generate secret key if not in environment
-app.secret_key = os.environ.get('SECRET_KEY') or 'dev-secret-key-123'
-
-# Database configuration
+# Configure database
 uri = os.getenv("DATABASE_URL")
-if uri:
-    if uri.startswith("postgres://"):
-        uri = uri.replace("postgres://", "postgresql://", 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = uri
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
-
+if uri and uri.startswith("postgres://"):
+    uri = uri.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = uri or 'sqlite:///blog.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
-# Database Models
+
+# Define models
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -83,11 +78,11 @@ def init_db():
 @app.route('/')
 def home():
     try:
-        posts = Post.query.filter_by(is_published=True).order_by(Post.created_at.desc()).all()
+        posts = db.session.execute(db.select(Post).filter_by(is_published=True).order_by(Post.created_at.desc())).scalars()
         return render_template('blog.html', posts=posts)
     except Exception as e:
-        app.logger.error(f"Home route error: {e}")
-        return "An error occurred", 500
+        app.logger.error(f"Database error: {e}")
+        return "Service temporarily unavailable", 503
 
 @app.route('/post/<int:post_id>')
 def post_detail(post_id):
@@ -221,14 +216,10 @@ def admin_logout():
             db.session.commit()
     session.pop('user_id', None)
     return redirect(url_for('home'))
-
-
+    
 if __name__ == '__main__':
-    # Initialize database
-    init_db()
-    
-    # Get port from environment or default to 5000
+    with app.app_context():
+        db.create_all()
     port = int(os.environ.get('PORT', 5000))
-    
-    # Run the app
     app.run(host='0.0.0.0', port=port)
+
