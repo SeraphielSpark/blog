@@ -1,11 +1,9 @@
-
 import os
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, make_response
+from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy import desc
-import uuid
 import html
 
 # Initialize Flask app
@@ -73,15 +71,12 @@ def health():
 # Initialize admin user
 def init_admin():
     with app.app_context():
-        try:
-            db.create_all()
-            if not User.query.filter_by(username='admin').first():
-                admin = User(username='admin', online=True)
-                admin.set_password('admin123')
-                db.session.add(admin)
-                db.session.commit()
-        except Exception as e:
-            app.logger.error(f"Database initialization error: {e}")
+        db.create_all()
+        if not User.query.filter_by(username='admin').first():
+            admin = User(username='admin', online=True)
+            admin.set_password(os.environ.get('ADMIN_PASSWORD', 'admin123'))
+            db.session.add(admin)
+            db.session.commit()
 
 # Routes
 @app.route('/')
@@ -96,7 +91,7 @@ def home():
 def post_detail(post_id):
     try:
         post = Post.query.get_or_404(post_id)
-        comments = Comment.query.filter_by(post_id=post_id, parent_id=None, is_approved=True).all()
+        comments = Comment.query.filter_by(post_id=post_id, parent_id=None, is_approved=True).order_by(Comment.created_at.desc()).all()
         return render_template_string(POST_DETAIL_TEMPLATE, post=post, comments=comments)
     except Exception as e:
         return make_response("Post not found", 404)
@@ -105,7 +100,7 @@ def post_detail(post_id):
 def add_comment():
     try:
         data = request.get_json()
-        if not all(key in data for key in ['name', 'email', 'content', 'postId']):
+        if not data or not all(key in data for key in ['name', 'email', 'content', 'postId']):
             return jsonify({'success': False, 'message': 'Missing required fields'}), 400
         
         new_comment = Comment(
@@ -177,7 +172,8 @@ def manage_posts():
                 Post.query.filter_by(id=post_id).delete()
             elif action == 'toggle':
                 post = Post.query.get(post_id)
-                post.is_published = not post.is_published
+                if post:
+                    post.is_published = not post.is_published
             
             db.session.commit()
         except Exception as e:
@@ -203,7 +199,8 @@ def manage_comments():
                 Comment.query.filter_by(id=comment_id).delete()
             elif action == 'toggle':
                 comment = Comment.query.get(comment_id)
-                comment.is_approved = not comment.is_approved
+                if comment:
+                    comment.is_approved = not comment.is_approved
             
             db.session.commit()
         except Exception as e:
@@ -225,6 +222,9 @@ def new_post():
             title = request.form.get('title')
             content = request.form.get('content')
             status = request.form.get('status', 'published')
+            
+            if not title or not content:
+                return render_template_string(ADMIN_NEW_POST_TEMPLATE, error='Title and content are required')
             
             new_post = Post(
                 title=html.escape(title),
@@ -254,7 +254,7 @@ def admin_logout():
     session.pop('user_id', None)
     return redirect(url_for('home'))
 
-# HTML Templates as strings
+# HTML Templates
 HOME_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -263,7 +263,6 @@ HOME_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Awesome Blog</title>
     <style>
-        /* All CSS styles from previous solution */
         :root {
             --primary: #4361ee;
             --primary-dark: #3a0ca3;
@@ -489,7 +488,159 @@ POST_DETAIL_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ post.title }} - My Awesome Blog</title>
     <style>
-        /* Same styles as in HOME_TEMPLATE */
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a0ca3;
+            --secondary: #3f37c9;
+            --accent: #4895ef;
+            --danger: #f72585;
+            --success: #4cc9f0;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --white: #ffffff;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fb;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+        
+        .page-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .main-header {
+            background-color: var(--white);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .main-nav a {
+            margin-left: 1.5rem;
+            text-decoration: none;
+            color: var(--primary);
+            font-weight: 500;
+        }
+        
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+        }
+        
+        .main-footer {
+            background-color: var(--dark);
+            color: var(--white);
+            padding: 1.5rem;
+            text-align: center;
+        }
+        
+        .blog-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .post-full, .post-preview {
+            background-color: var(--white);
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .post-title {
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+        
+        .post-meta {
+            color: var(--gray);
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .post-content {
+            margin-bottom: 1.5rem;
+            line-height: 1.7;
+        }
+        
+        .comments-section {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #eee;
+        }
+        
+        .comment {
+            background-color: var(--light);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 1rem;
+        }
+        
+        .btn:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        .form-group textarea {
+            min-height: 150px;
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1.5rem;
+        }
     </style>
 </head>
 <body>
@@ -604,7 +755,6 @@ POST_DETAIL_TEMPLATE = """
 </html>
 """
 
-# Admin templates
 ADMIN_LOGIN_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -613,7 +763,6 @@ ADMIN_LOGIN_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login</title>
     <style>
-        /* Admin styles */
         .login-container {
             display: flex;
             justify-content: center;
@@ -703,10 +852,483 @@ ADMIN_LOGIN_TEMPLATE = """
 </html>
 """
 
-# Other admin templates would be defined similarly but omitted for brevity
-# In a real implementation, you'd include all the admin templates here
+ADMIN_DASHBOARD_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a0ca3;
+            --secondary: #3f37c9;
+            --accent: #4895ef;
+            --danger: #f72585;
+            --success: #4cc9f0;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --white: #ffffff;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fb;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+        
+        .page-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .main-header {
+            background-color: var(--white);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .main-nav a {
+            margin-left: 1.5rem;
+            text-decoration: none;
+            color: var(--primary);
+            font-weight: 500;
+        }
+        
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+        }
+        
+        .main-footer {
+            background-color: var(--dark);
+            color: var(--white);
+            padding: 1.5rem;
+            text-align: center;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--dark);
+        }
+        
+        .recent-list {
+            margin-top: 1rem;
+        }
+        
+        .recent-item {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .recent-item:last-child {
+            border-bottom: none;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 1rem;
+        }
+        
+        .btn:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .admin-nav {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="main-header">
+            <div class="header-content">
+                <h1><a href="/admin/dashboard">Admin Dashboard</a></h1>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard">Dashboard</a>
+                    <a href="/admin/posts">Manage Posts</a>
+                    <a href="/admin/comments">Manage Comments</a>
+                    <a href="/admin/new_post">New Post</a>
+                    <a href="/admin/logout">Logout</a>
+                </nav>
+            </div>
+        </header>
 
+        <main class="main-content">
+            <div class="admin-nav">
+                <a href="/admin/dashboard" class="btn">Dashboard</a>
+                <a href="/admin/posts" class="btn">Posts</a>
+                <a href="/admin/comments" class="btn">Comments</a>
+                <a href="/admin/new_post" class="btn">New Post</a>
+            </div>
+            
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <div class="dashboard">
+                <div class="card">
+                    <h2>Total Posts</h2>
+                    <div class="stat-value">{{ stats.total_posts }}</div>
+                </div>
+                
+                <div class="card">
+                    <h2>Pending Comments</h2>
+                    <div class="stat-value">{{ stats.pending_comments }}</div>
+                </div>
+                
+                <div class="card">
+                    <h2>Online Users</h2>
+                    <div class="stat-value">{{ stats.online_users }}</div>
+                </div>
+            </div>
+            
+            <div class="dashboard">
+                <div class="card">
+                    <h2>Recent Posts</h2>
+                    <div class="recent-list">
+                        {% for post in recent_posts %}
+                            <div class="recent-item">
+                                <a href="/post/{{ post.id }}">{{ post.title }}</a>
+                                <div class="post-date">{{ post.created_at.strftime('%b %d, %Y') }}</div>
+                            </div>
+                        {% else %}
+                            <p>No posts found</p>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2>Recent Comments</h2>
+                    <div class="recent-list">
+                        {% for comment in recent_comments %}
+                            <div class="recent-item">
+                                <strong>{{ comment.name }}</strong> on 
+                                <a href="/post/{{ comment.post_id }}">Post #{{ comment.post_id }}</a>
+                                <p>{{ comment.content[:50] }}...</p>
+                                <div class="comment-date">{{ comment.created_at.strftime('%b %d, %Y') }}</div>
+                            </div>
+                        {% else %}
+                            <p>No comments found</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="main-footer">
+            <p>&copy; {{ current_year }} My Awesome Blog. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+
+ADMIN_POSTS_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Posts</title>
+    <style>
+        /* Same styles as ADMIN_DASHBOARD_TEMPLATE */
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="main-header">
+            <div class="header-content">
+                <h1><a href="/admin/dashboard">Admin Dashboard</a></h1>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard">Dashboard</a>
+                    <a href="/admin/posts">Manage Posts</a>
+                    <a href="/admin/comments">Manage Comments</a>
+                    <a href="/admin/new_post">New Post</a>
+                    <a href="/admin/logout">Logout</a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="admin-nav">
+                <a href="/admin/dashboard" class="btn">Dashboard</a>
+                <a href="/admin/posts" class="btn">Posts</a>
+                <a href="/admin/comments" class="btn">Comments</a>
+                <a href="/admin/new_post" class="btn">New Post</a>
+            </div>
+            
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <h2>Manage Posts</h2>
+            <a href="/admin/new_post" class="btn">Create New Post</a>
+            
+            <div class="posts-list" style="margin-top: 2rem;">
+                {% for post in posts %}
+                    <div class="card" style="margin-bottom: 1rem;">
+                        <h3>{{ post.title }}</h3>
+                        <p>Status: {{ 'Published' if post.is_published else 'Draft' }}</p>
+                        <p>Created: {{ post.created_at.strftime('%B %d, %Y') }}</p>
+                        
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                            <form method="POST" style="display: inline;">
+                                <input type="hidden" name="post_id" value="{{ post.id }}">
+                                <input type="hidden" name="action" value="toggle">
+                                <button type="submit" class="btn">
+                                    {{ 'Unpublish' if post.is_published else 'Publish' }}
+                                </button>
+                            </form>
+                            
+                            <form method="POST" style="display: inline;">
+                                <input type="hidden" name="post_id" value="{{ post.id }}">
+                                <input type="hidden" name="action" value="delete">
+                                <button type="submit" class="btn" style="background-color: var(--danger);">
+                                    Delete
+                                </button>
+                            </form>
+                            
+                            <a href="/post/{{ post.id }}" class="btn" target="_blank">View</a>
+                        </div>
+                    </div>
+                {% else %}
+                    <p>No posts found</p>
+                {% endfor %}
+            </div>
+        </main>
+
+        <footer class="main-footer">
+            <p>&copy; {{ current_year }} My Awesome Blog. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+
+ADMIN_COMMENTS_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Comments</title>
+    <style>
+        /* Same styles as ADMIN_DASHBOARD_TEMPLATE */
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="main-header">
+            <div class="header-content">
+                <h1><a href="/admin/dashboard">Admin Dashboard</a></h1>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard">Dashboard</a>
+                    <a href="/admin/posts">Manage Posts</a>
+                    <a href="/admin/comments">Manage Comments</a>
+                    <a href="/admin/new_post">New Post</a>
+                    <a href="/admin/logout">Logout</a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="admin-nav">
+                <a href="/admin/dashboard" class="btn">Dashboard</a>
+                <a href="/admin/posts" class="btn">Posts</a>
+                <a href="/admin/comments" class="btn">Comments</a>
+                <a href="/admin/new_post" class="btn">New Post</a>
+            </div>
+            
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <h2>Manage Comments</h2>
+            
+            <div class="comments-list" style="margin-top: 2rem;">
+                {% for comment in comments %}
+                    <div class="card" style="margin-bottom: 1rem;">
+                        <h3>{{ comment.name }} &lt;{{ comment.email }}&gt;</h3>
+                        <p>Status: {{ 'Approved' if comment.is_approved else 'Pending' }}</p>
+                        <p>Post: <a href="/post/{{ comment.post_id }}">#{{ comment.post_id }}</a></p>
+                        <p>{{ comment.content }}</p>
+                        <p>Created: {{ comment.created_at.strftime('%B %d, %Y at %H:%M') }}</p>
+                        
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                            <form method="POST" style="display: inline;">
+                                <input type="hidden" name="comment_id" value="{{ comment.id }}">
+                                <input type="hidden" name="action" value="toggle">
+                                <button type="submit" class="btn">
+                                    {{ 'Unapprove' if comment.is_approved else 'Approve' }}
+                                </button>
+                            </form>
+                            
+                            <form method="POST" style="display: inline;">
+                                <input type="hidden" name="comment_id" value="{{ comment.id }}">
+                                <input type="hidden" name="action" value="delete">
+                                <button type="submit" class="btn" style="background-color: var(--danger);">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% else %}
+                    <p>No comments found</p>
+                {% endfor %}
+            </div>
+        </main>
+
+        <footer class="main-footer">
+            <p>&copy; {{ current_year }} My Awesome Blog. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+
+ADMIN_NEW_POST_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Post</title>
+    <style>
+        /* Same styles as ADMIN_DASHBOARD_TEMPLATE */
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        .form-group textarea {
+            min-height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="main-header">
+            <div class="header-content">
+                <h1><a href="/admin/dashboard">Admin Dashboard</a></h1>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard">Dashboard</a>
+                    <a href="/admin/posts">Manage Posts</a>
+                    <a href="/admin/comments">Manage Comments</a>
+                    <a href="/admin/new_post">New Post</a>
+                    <a href="/admin/logout">Logout</a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="admin-nav">
+                <a href="/admin/dashboard" class="btn">Dashboard</a>
+                <a href="/admin/posts" class="btn">Posts</a>
+                <a href="/admin/comments" class="btn">Comments</a>
+                <a href="/admin/new_post" class="btn">New Post</a>
+            </div>
+            
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <h2>Create New Post</h2>
+            
+            <form method="POST" class="card" style="padding: 2rem;">
+                <div class="form-group">
+                    <label for="title">Title</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="content">Content</label>
+                    <textarea id="content" name="content" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="status">Status</label>
+                    <select id="status" name="status">
+                        <option value="published">Published</option>
+                        <option value="draft">Draft</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn">Create Post</button>
+            </form>
+        </main>
+
+        <footer class="main-footer">
+            <p>&copy; {{ current_year }} My Awesome Blog. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+
+# Initialize the application
 if __name__ == '__main__':
     init_admin()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+else:
+    init_admin()
