@@ -5,8 +5,7 @@ pip install -r requirements.txt
 
 # Initialize database
 python -c "
-from app import app
-from models import db, User, Post, Comment
+from app import app, db, User, Post, Comment
 
 with app.app_context():
     db.create_all()
