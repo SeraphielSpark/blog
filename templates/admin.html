@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="admin-container">
+    {% if not section %}
+        <!-- Login Form -->
+        <div class="login-form">
+            <h1>Admin Login</h1>
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+            <form method="POST">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn">Login</button>
+            </form>
+        </div>
+    {% else %}
+        <!-- Admin Dashboard -->
+        <aside class="sidebar">
+            <h2>Admin Panel</h2>
+            <nav>
+                <a href="/admin/dashboard" class="{% if section == 'dashboard' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+                <a href="/admin/posts" class="{% if section == 'posts' %}active{% endif %}">
+                    <i class="fas fa-newspaper"></i> Posts
+                </a>
+                <a href="/admin/comments" class="{% if section == 'comments' %}active{% endif %}">
+                    <i class="fas fa-comments"></i> Comments
+                </a>
+                <a href="/admin/new_post" class="{% if section == 'new_post' %}active{% endif %}">
+                    <i class="fas fa-plus-circle"></i> New Post
+                </a>
+                <a href="/admin/logout" class="logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </nav>
+        </aside>
+
+        <main class="admin-main">
+            {% if section == 'dashboard' %}
+                <h1>Dashboard</h1>
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Total Posts</h3>
+                        <p>{{ stats.total_posts }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Pending Comments</h3>
+                        <p>{{ stats.pending_comments }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Online Users</h3>
+                        <p>{{ stats.online_users }}</p>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h2>Recent Posts</h2>
+                    <ul>
+                        {% for post in recent_posts %}
+                            <li>
+                                <a href="/post/{{ post.id }}">{{ post.title }}</a>
+                                <span>{{ post.created_at.strftime('%b %d, %Y') }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+
+                    <h2>Recent Comments</h2>
+                    <ul>
+                        {% for comment in recent_comments %}
+                            <li>
+                                <p>{{ comment.content }}</p>
+                                <span>By {{ comment.name }} on {{ comment.created_at.strftime('%b %d, %Y') }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+            {% elif section == 'posts' %}
+                <h1>Manage Posts</h1>
+                <a href="/admin/new_post" class="btn">Create New Post</a>
+                
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Author</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for post in posts %}
+                            <tr>
+                                <td><a href="/post/{{ post.id }}">{{ post.title }}</a></td>
+                                <td>{{ post.author.username }}</td>
+                                <td>{{ post.created_at.strftime('%b %d, %Y') }}</td>
+                                <td>
+                                    {% if post.is_published %}
+                                        <span class="badge published">Published</span>
+                                    {% else %}
+                                        <span class="badge draft">Draft</span>
+                                    {% endif %}
+                                </td>
+                                <td class="actions">
+                                    <a href="/admin/new_post?edit={{ post.id }}" class="btn small">Edit</a>
+                                    <form method="POST" action="/admin/posts" style="display: inline;">
+                                        <input type="hidden" name="post_id" value="{{ post.id }}">
+                                        <input type="hidden" name="action" value="toggle">
+                                        <button type="submit" class="btn small">
+                                            {% if post.is_published %}Unpublish{% else %}Publish{% endif %}
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="/admin/posts" onsubmit="return confirmAction('Delete this post?')" style="display: inline;">
+                                        <input type="hidden" name="post_id" value="{{ post.id }}">
+                                        <input type="hidden" name="action" value="delete">
+                                        <button type="submit" class="btn small danger">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+            {% elif section == 'comments' %}
+                <h1>Manage Comments</h1>
+                
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Comment</th>
+                            <th>Post</th>
+                            <th>Author</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for comment in comments %}
+                            <tr>
+                                <td>{{ comment.content[:50] }}{% if comment.content|length > 50 %}...{% endif %}</td>
+                                <td><a href="/post/{{ comment.post_id }}">{{ comment.post.title }}</a></td>
+                                <td>{{ comment.name }} ({{ comment.email }})</td>
+                                <td>{{ comment.created_at.strftime('%b %d, %Y') }}</td>
+                                <td>
+                                    {% if comment.is_approved %}
+                                        <span class="badge approved">Approved</span>
+                                    {% else %}
+                                        <span class="badge pending">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td class="actions">
+                                    <form method="POST" action="/admin/comments" style="display: inline;">
+                                        <input type="hidden" name="comment_id" value="{{ comment.id }}">
+                                        <input type="hidden" name="action" value="toggle">
+                                        <button type="submit" class="btn small">
+                                            {% if comment.is_approved %}Unapprove{% else %}Approve{% endif %}
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="/admin/comments" onsubmit="return confirmAction('Delete this comment?')" style="display: inline;">
+                                        <input type="hidden" name="comment_id" value="{{ comment.id }}">
+                                        <input type="hidden" name="action" value="delete">
+                                        <button type="submit" class="btn small danger">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+            {% elif section == 'new_post' %}
+                <h1>{% if request.args.get('edit') %}Edit Post{% else %}Create New Post{% endif %}</h1>
+                
+                <form method="POST" class="post-form">
+                    <div class="form-group">
+                        <label for="title">Title</label>
+                        <input type="text" id="title" name="title" value="{{ post.title if post }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="content">Content</label>
+                        <textarea id="content" name="content" required>{{ post.content if post }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Status</label>
+                        <select id="status" name="status">
+                            <option value="published" {% if post and post.is_published %}selected{% endif %}>Published</option>
+                            <option value="draft" {% if post and not post.is_published %}selected{% endif %}>Draft</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <a href="/admin/posts" class="btn">Cancel</a>
+                        <button type="submit" class="btn primary">Save Post</button>
+                    </div>
+                </form>
+            {% endif %}
+        </main>
+    {% endif %}
+</div>
+{% endblock %}
